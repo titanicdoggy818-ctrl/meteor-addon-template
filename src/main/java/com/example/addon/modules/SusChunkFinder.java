@@ -1,4 +1,3 @@
-
 package com.example.addon.modules;
 
 import com.example.addon.AddonTemplate;
@@ -19,7 +18,6 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.KelpBlock;
-import net.minecraft.block.PillarBlock;
 import net.minecraft.state.property.Properties;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -62,7 +60,6 @@ public class SusChunkFinder extends Module {
     private final Setting<SettingColor> boxColor;
 
     private List<BlockPos> blocks = new ArrayList<>();
-    // {chunkX, chunkZ, count, averageY}
     private List<int[]> chunkHits = new ArrayList<>();
     private int lastChunkCount;
     private int timer;
@@ -273,9 +270,9 @@ public class SusChunkFinder extends Module {
             return state.get(KelpBlock.AGE) >= minAge.get() ? 0 : -1;
         }
 
-        if (caveVines.get() && state.isOf(Blocks.CAVE_VINES)) {
-            return state.contains(Properties.AGE_25)
-                && state.get(Properties.AGE_25) >= minAge.get() ? 1 : -1;
+        if (caveVines.get() && state.isOf(Blocks.CAVE_VINES_PLANT)
+            && state.contains(Properties.AGE_25)) {
+            return state.get(Properties.AGE_25) >= minAge.get() ? 1 : -1;
         }
 
         if (vines.get() && state.isOf(Blocks.VINE)) {
@@ -301,8 +298,9 @@ public class SusChunkFinder extends Module {
             return 5;
         }
 
-        if (rotatedDeepslate.get() && state.isOf(Blocks.DEEPSLATE)) {
-            return state.get(PillarBlock.AXIS) != Direction.Axis.Y ? 6 : -1;
+        if (rotatedDeepslate.get() && state.isOf(Blocks.DEEPSLATE)
+            && state.contains(Properties.AXIS)) {
+            return state.get(Properties.AXIS) != Direction.Axis.Y ? 6 : -1;
         }
 
         return -1;
@@ -427,10 +425,9 @@ public class SusChunkFinder extends Module {
         Color side = new Color(base.r, base.g, base.b, alpha.get());
         ShapeMode mode = shapeMode.get();
 
-        // Render each flagged chunk as a full-height 16x16 box.
         if (highlightChunks.get()) {
             double minWorldY = mc.world.getBottomY();
-         double maxWorldY = mc.world.getHeight();
+            double maxWorldY = mc.world.getHeight();
             for (int[] hit : chunkHits) {
                 double x1 = hit[0] << 4;
                 double z1 = hit[1] << 4;
@@ -443,7 +440,6 @@ public class SusChunkFinder extends Module {
             }
         }
 
-        // Optionally render the individual matching blocks too.
         if (highlightBlocks.get()) {
             int limit = Math.min(blocks.size(), maxBlocks.get());
 
