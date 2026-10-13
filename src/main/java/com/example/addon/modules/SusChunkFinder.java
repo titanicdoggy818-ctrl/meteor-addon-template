@@ -430,8 +430,7 @@ public class SusChunkFinder extends Module {
         // Render each flagged chunk as a full-height 16x16 box.
         if (highlightChunks.get()) {
             double minWorldY = mc.world.getBottomY();
-            double maxWorldY = mc.world.getTopY();
-
+         double maxWorldY = mc.world.getHeight();
             for (int[] hit : chunkHits) {
                 double x1 = hit[0] << 4;
                 double z1 = hit[1] << 4;
