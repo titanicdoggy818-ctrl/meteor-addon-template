@@ -9,7 +9,7 @@ import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.entity.Entity;
 
 import java.util.ArrayList;
 import java.util.Iterator;
