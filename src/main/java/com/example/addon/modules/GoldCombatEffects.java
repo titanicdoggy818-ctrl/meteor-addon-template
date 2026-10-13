@@ -9,6 +9,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Box;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -96,8 +97,9 @@ public class GoldCombatEffects extends Module {
         if (mc.player == null || mc.world == null) return;
 
         Entity target = event.entity;
+        Box box = target.getBoundingBox();
         double cx = target.getX();
-        double cy = target.getY() + target.getBbHeight() * 0.55;
+        double cy = box.minY + (box.maxY - box.minY) * 0.55;
         double cz = target.getZ();
 
         int amount = particleCount.get();
