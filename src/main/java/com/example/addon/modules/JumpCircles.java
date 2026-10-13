@@ -1,3 +1,4 @@
+
 package com.example.addon.modules;
 
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -15,35 +16,44 @@ import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
-/** Draws a ring on the ground each time you jump. */
+/**
+ * Draws an expanding ring at the player's feet when they jump.
+ */
 public class JumpCircles extends Module {
-    private record Circle(double x, double y, double z, long start) {}
+    private record Circle(double x, double y, double z, long startNanos) {}
 
     private final SettingGroup sg = settings.getDefaultGroup();
 
     private final Setting<Double> maxRadius = sg.add(new DoubleSetting.Builder()
         .name("max-radius")
-        .description("Radius of the ring.")
-        .defaultValue(1.5).min(0.1).sliderMax(5)
+        .description("Maximum radius of the ring.")
+        .defaultValue(1.5)
+        .min(0.1)
+        .sliderMax(5.0)
         .build());
 
     private final Setting<Integer> duration = sg.add(new IntSetting.Builder()
         .name("duration")
         .description("How many ticks a ring lasts.")
-        .defaultValue(20).min(1).sliderMax(100)
+        .defaultValue(20)
+        .min(1)
+        .sliderMax(100)
         .build());
 
     private final Setting<Integer> segments = sg.add(new IntSetting.Builder()
         .name("segments")
-        .description("How round the ring is. Higher looks smoother.")
-        .defaultValue(32).min(6).sliderMax(96)
+        .description("Higher values make the ring smoother.")
+        .defaultValue(32)
+        .min(6)
+        .sliderMax(96)
         .build());
 
     private final Setting<Boolean> grow = sg.add(new BoolSetting.Builder()
         .name("grow")
-        .description("Make the ring expand. Off keeps it at full size.")
+        .description("Expand the ring from zero to its maximum radius.")
         .defaultValue(true)
         .build());
 
@@ -53,6 +63,14 @@ public class JumpCircles extends Module {
         .defaultValue(true)
         .build());
 
+    private final Setting<Double> heightOffset = sg.add(new DoubleSetting.Builder()
+        .name("height-offset")
+        .description("Vertical offset above the player's feet.")
+        .defaultValue(0.02)
+        .min(0.0)
+        .sliderMax(0.5)
+        .build());
+
     private final Setting<SettingColor> color = sg.add(new ColorSetting.Builder()
         .name("ring-color")
         .description("Color of the ring.")
@@ -60,16 +78,20 @@ public class JumpCircles extends Module {
         .build());
 
     private final List<Circle> circles = new ArrayList<>();
-    private boolean wasOnGround = true;
+    private boolean wasOnGround;
 
     public JumpCircles() {
-        super(Categories.Render, "jump-circles", "Draws a ring on the ground when you jump.");
+        super(
+            Categories.Render,
+            "jump-circles",
+            "Draws an expanding ring at your feet when you jump."
+        );
     }
 
     @Override
     public void onActivate() {
         circles.clear();
-        wasOnGround = true;
+        wasOnGround = mc.player != null && mc.player.isOnGround();
     }
 
     @Override
@@ -79,37 +101,79 @@ public class JumpCircles extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null) return;
+        if (mc.player == null || mc.world == null) {
+            wasOnGround = false;
+            return;
+        }
 
         boolean onGround = mc.player.isOnGround();
-        if (wasOnGround && !onGround && mc.player.getVelocity().y > 0.1) {
-            circles.add(new Circle(mc.player.getX(), mc.player.getY() + 0.02, mc.player.getZ(), System.currentTimeMillis()));
+
+        // Detect the transition from grounded to rising.
+        if (wasOnGround && !onGround && mc.player.getVelocity().y > 0.0) {
+            circles.add(new Circle(
+                mc.player.getX(),
+                mc.player.getY() + heightOffset.get(),
+                mc.player.getZ(),
+                System.nanoTime()
+            ));
         }
+
         wasOnGround = onGround;
     }
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        long now = System.currentTimeMillis();
-        long life = duration.get() * 50L;
-        circles.removeIf(c -> now - c.start() > life);
+        if (mc.world == null) return;
 
-        SettingColor base = color.get();
-        int n = segments.get();
+        long now = System.nanoTime();
+        long lifeNanos = duration.get() * 50_000_000L;
 
-        for (Circle c : circles) {
-            double t = (now - c.start()) / (double) life;
-            double r = grow.get() ? maxRadius.get() * t : maxRadius.get();
-            int a = fade.get() ? (int) (base.a * (1.0 - t)) : base.a;
-            Color col = new Color(base.r, base.g, base.b, Math.max(0, Math.min(255, a)));
+        Iterator<Circle> iterator = circles.iterator();
 
-            for (int i = 0; i < n; i++) {
-                double a1 = 2 * Math.PI * i / n;
-                double a2 = 2 * Math.PI * (i + 1) / n;
+        while (iterator.hasNext()) {
+            Circle circle = iterator.next();
+            long elapsed = now - circle.startNanos();
+
+            if (elapsed >= lifeNanos) {
+                iterator.remove();
+                continue;
+            }
+
+            double t = Math.max(0.0, Math.min(1.0,
+                elapsed / (double) lifeNanos));
+
+            double radius = grow.get()
+                ? maxRadius.get() * t
+                : maxRadius.get();
+
+            SettingColor base = color.get();
+
+            int alpha = fade.get()
+                ? (int) (base.a * (1.0 - t))
+                : base.a;
+
+            Color renderColor = new Color(
+                base.r,
+                base.g,
+                base.b,
+                Math.max(0, Math.min(255, alpha))
+            );
+
+            int count = segments.get();
+
+            for (int i = 0; i < count; i++) {
+                double angle1 = 2.0 * Math.PI * i / count;
+                double angle2 = 2.0 * Math.PI * (i + 1) / count;
+
                 event.renderer.line(
-                    c.x() + Math.cos(a1) * r, c.y(), c.z() + Math.sin(a1) * r,
-                    c.x() + Math.cos(a2) * r, c.y(), c.z() + Math.sin(a2) * r,
-                    col);
+                    circle.x() + Math.cos(angle1) * radius,
+                    circle.y(),
+                    circle.z() + Math.sin(angle1) * radius,
+                    circle.x() + Math.cos(angle2) * radius,
+                    circle.y(),
+                    circle.z() + Math.sin(angle2) * radius,
+                    renderColor
+                );
             }
         }
     }
