@@ -1,3 +1,4 @@
+
 package com.example.addon.modules;
 
 import com.example.addon.AddonTemplate;
@@ -28,11 +29,6 @@ import net.minecraft.world.chunk.WorldChunk;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Flags chunks that hold a suspicious number of grown or player-placed blocks
- * (kelp, cave vines, vines, amethyst, bamboo, bee nests, sideways deepslate).
- * PrimeChunkFinder and SuspiciousESP are the same scanner with different defaults.
- */
 public class SusChunkFinder extends Module {
     private static final int TYPES = 7;
 
@@ -66,132 +62,249 @@ public class SusChunkFinder extends Module {
     private final Setting<SettingColor> boxColor;
 
     private List<BlockPos> blocks = new ArrayList<>();
-    private List<int[]> chunkHits = new ArrayList<>(); // {chunkX, chunkZ, count, averageY}
+    // {chunkX, chunkZ, count, averageY}
+    private List<int[]> chunkHits = new ArrayList<>();
     private int lastChunkCount;
     private int timer;
 
     public SusChunkFinder() {
-        this(AddonTemplate.CATEGORY, "sus-chunk-finder", "Flags chunks with grown or player-placed blocks.",
-            5, 1, true, true, false, new SettingColor(255, 80, 80, 255));
+        this(
+            AddonTemplate.CATEGORY,
+            "sus-chunk-finder",
+            "Flags chunks with grown or player-placed blocks.",
+            5,
+            1,
+            true,
+            true,
+            false,
+            new SettingColor(255, 80, 80, 255)
+        );
     }
 
-    protected SusChunkFinder(Category category, String name, String description, int defaultSensitivity,
-                             int defaultMinTypes, boolean defaultHighlightChunks, boolean defaultHighlightBlocks,
-                             boolean allTypesOn, SettingColor defaultColor) {
+    protected SusChunkFinder(
+        Category category,
+        String name,
+        String description,
+        int defaultSensitivity,
+        int defaultMinTypes,
+        boolean defaultHighlightChunks,
+        boolean defaultHighlightBlocks,
+        boolean allTypesOn,
+        SettingColor defaultColor
+    ) {
         super(category, name, description);
 
         scanDistance = sgScan.add(new IntSetting.Builder()
-            .name("scan-distance")
+            .name("simulation-distance")
             .description("How many chunks around you to scan.")
-            .defaultValue(8).min(1).sliderMax(32).build());
+            .defaultValue(8)
+            .min(1)
+            .sliderMax(32)
+            .build()
+        );
 
         sensitivity = sgScan.add(new IntSetting.Builder()
             .name("sensitivity")
-            .description("How many matching blocks a chunk needs before it is flagged. Lower flags more chunks.")
-            .defaultValue(defaultSensitivity).min(1).sliderMax(50).build());
+            .description("Minimum number of matching blocks needed to flag a chunk.")
+            .defaultValue(defaultSensitivity)
+            .min(1)
+            .sliderMax(50)
+            .build()
+        );
 
         minTypes = sgScan.add(new IntSetting.Builder()
             .name("min-types")
-            .description("How many different block types a chunk needs. Only counts types you have turned on.")
-            .defaultValue(defaultMinTypes).min(1).max(TYPES).sliderRange(1, TYPES).build());
+            .description("Minimum number of different enabled block types required.")
+            .defaultValue(defaultMinTypes)
+            .min(1)
+            .max(TYPES)
+            .sliderRange(1, TYPES)
+            .build()
+        );
 
         scanInterval = sgScan.add(new IntSetting.Builder()
             .name("scan-interval")
-            .description("Ticks between scans. Higher is lighter on your game.")
-            .defaultValue(40).min(5).sliderMax(200).build());
+            .description("Ticks between scans.")
+            .defaultValue(40)
+            .min(5)
+            .sliderMax(200)
+            .build()
+        );
 
         minY = sgScan.add(new IntSetting.Builder()
-            .name("min-y").description("Lowest Y level to scan.")
-            .defaultValue(-64).sliderRange(-64, 320).build());
+            .name("min-y")
+            .description("Lowest Y level to scan.")
+            .defaultValue(-64)
+            .sliderRange(-64, 320)
+            .build()
+        );
 
         maxY = sgScan.add(new IntSetting.Builder()
-            .name("max-y").description("Highest Y level to scan.")
-            .defaultValue(320).sliderRange(-64, 320).build());
+            .name("max-y")
+            .description("Highest Y level to scan.")
+            .defaultValue(320)
+            .sliderRange(-64, 320)
+            .build()
+        );
 
         chatNotify = sgScan.add(new BoolSetting.Builder()
             .name("chat-notify")
-            .description("Send a chat message when a scan flags more chunks than the last one.")
-            .defaultValue(false).build());
+            .description("Notify when additional chunks are flagged.")
+            .defaultValue(false)
+            .build()
+        );
 
         kelp = sgBlocks.add(new BoolSetting.Builder()
-            .name("kelp").description("Count kelp at or above the minimum age.")
-            .defaultValue(true).build());
+            .name("kelp")
+            .description("Detect fully grown kelp.")
+            .defaultValue(true)
+            .build()
+        );
 
         caveVines = sgBlocks.add(new BoolSetting.Builder()
-            .name("cave-vines").description("Count cave vines at or above the minimum age.")
-            .defaultValue(allTypesOn).build());
+            .name("cave-vines")
+            .description("Detect cave vines with glow berries.")
+            .defaultValue(allTypesOn)
+            .build()
+        );
 
         minAge = sgBlocks.add(new IntSetting.Builder()
-            .name("min-age").description("Minimum age for kelp and cave vines. 25 is fully grown.")
-            .defaultValue(25).min(0).max(25).sliderRange(0, 25).build());
+            .name("min-age")
+            .description("Minimum age for kelp and cave vines.")
+            .defaultValue(25)
+            .min(0)
+            .max(25)
+            .sliderRange(0, 25)
+            .build()
+        );
 
         vines = sgBlocks.add(new BoolSetting.Builder()
-            .name("vines").description("Count vines.")
-            .defaultValue(allTypesOn).build());
+            .name("vines")
+            .description("Detect ordinary vines.")
+            .defaultValue(allTypesOn)
+            .build()
+        );
 
         amethyst = sgBlocks.add(new BoolSetting.Builder()
-            .name("amethyst").description("Count fully grown amethyst clusters.")
-            .defaultValue(true).build());
+            .name("amethyst")
+            .description("Detect fully grown amethyst clusters.")
+            .defaultValue(true)
+            .build()
+        );
 
         amethystBuds = sgBlocks.add(new BoolSetting.Builder()
-            .name("amethyst-buds").description("Also count small, medium and large amethyst buds.")
-            .defaultValue(false).build());
+            .name("amethyst-buds")
+            .description("Also detect small, medium, and large amethyst buds.")
+            .defaultValue(false)
+            .build()
+        );
 
         bamboo = sgBlocks.add(new BoolSetting.Builder()
-            .name("bamboo").description("Count bamboo.")
-            .defaultValue(allTypesOn).build());
+            .name("bamboo")
+            .description("Detect bamboo.")
+            .defaultValue(allTypesOn)
+            .build()
+        );
 
         beeNest = sgBlocks.add(new BoolSetting.Builder()
-            .name("bee-nest").description("Count bee nests.")
-            .defaultValue(allTypesOn).build());
+            .name("bee-nest")
+            .description("Detect bee nests.")
+            .defaultValue(allTypesOn)
+            .build()
+        );
 
         rotatedDeepslate = sgBlocks.add(new BoolSetting.Builder()
-            .name("rotated-deepslate").description("Count deepslate that is not upright.")
-            .defaultValue(allTypesOn).build());
+            .name("rotated-deepslate")
+            .description("Detect deepslate blocks with a horizontal axis.")
+            .defaultValue(allTypesOn)
+            .build()
+        );
 
         highlightChunks = sgRender.add(new BoolSetting.Builder()
-            .name("highlight-chunks").description("Draw a box over each flagged chunk.")
-            .defaultValue(defaultHighlightChunks).build());
+            .name("highlight-chunks")
+            .description("Highlight the entire flagged chunk.")
+            .defaultValue(defaultHighlightChunks)
+            .build()
+        );
 
         highlightBlocks = sgRender.add(new BoolSetting.Builder()
-            .name("highlight-blocks").description("Draw a box around each matching block in flagged chunks.")
-            .defaultValue(defaultHighlightBlocks).build());
+            .name("highlight-blocks")
+            .description("Highlight matching blocks inside flagged chunks.")
+            .defaultValue(defaultHighlightBlocks)
+            .build()
+        );
 
         maxBlocks = sgRender.add(new IntSetting.Builder()
-            .name("max-blocks").description("Most block boxes to draw.")
-            .defaultValue(500).min(1).sliderMax(5000).build());
+            .name("max-blocks")
+            .description("Maximum number of individual block boxes to render.")
+            .defaultValue(500)
+            .min(1)
+            .sliderMax(5000)
+            .build()
+        );
 
         alpha = sgRender.add(new IntSetting.Builder()
-            .name("alpha").description("Fill opacity of the boxes.")
-            .defaultValue(73).min(0).max(255).sliderRange(0, 255).build());
+            .name("alpha")
+            .description("Fill opacity, from 0 to 255.")
+            .defaultValue(73)
+            .min(0)
+            .max(255)
+            .sliderRange(0, 255)
+            .build()
+        );
 
         shapeMode = sgRender.add(new EnumSetting.Builder<ShapeMode>()
-            .name("shape-mode").description("How the boxes are rendered.")
-            .defaultValue(ShapeMode.Both).build());
+            .name("shape-mode")
+            .description("How highlights are rendered.")
+            .defaultValue(ShapeMode.Both)
+            .build()
+        );
 
         boxColor = sgRender.add(new ColorSetting.Builder()
-            .name("color").description("Color of the boxes.")
-            .defaultValue(defaultColor).build());
+            .name("color")
+            .description("Chunk and block highlight color.")
+            .defaultValue(defaultColor)
+            .build()
+        );
     }
 
-    /** Index of the block type this state counts as, or -1 if it does not count. */
     private int typeOf(BlockState state) {
         if (kelp.get() && state.isOf(Blocks.KELP)) {
             return state.get(KelpBlock.AGE) >= minAge.get() ? 0 : -1;
         }
+
         if (caveVines.get() && state.isOf(Blocks.CAVE_VINES)) {
-            return state.contains(Properties.AGE_25) && state.get(Properties.AGE_25) >= minAge.get() ? 1 : -1;
+            return state.contains(Properties.AGE_25)
+                && state.get(Properties.AGE_25) >= minAge.get() ? 1 : -1;
         }
-        if (vines.get() && state.isOf(Blocks.VINE)) return 2;
-        if (amethyst.get() && state.isOf(Blocks.AMETHYST_CLUSTER)) return 3;
-        if (amethystBuds.get() && (state.isOf(Blocks.LARGE_AMETHYST_BUD)
-            || state.isOf(Blocks.MEDIUM_AMETHYST_BUD)
-            || state.isOf(Blocks.SMALL_AMETHYST_BUD))) return 3;
-        if (bamboo.get() && state.isOf(Blocks.BAMBOO)) return 4;
-        if (beeNest.get() && state.isOf(Blocks.BEE_NEST)) return 5;
+
+        if (vines.get() && state.isOf(Blocks.VINE)) {
+            return 2;
+        }
+
+        if (amethyst.get() && state.isOf(Blocks.AMETHYST_CLUSTER)) {
+            return 3;
+        }
+
+        if (amethystBuds.get() &&
+            (state.isOf(Blocks.LARGE_AMETHYST_BUD)
+                || state.isOf(Blocks.MEDIUM_AMETHYST_BUD)
+                || state.isOf(Blocks.SMALL_AMETHYST_BUD))) {
+            return 3;
+        }
+
+        if (bamboo.get() && state.isOf(Blocks.BAMBOO)) {
+            return 4;
+        }
+
+        if (beeNest.get() && state.isOf(Blocks.BEE_NEST)) {
+            return 5;
+        }
+
         if (rotatedDeepslate.get() && state.isOf(Blocks.DEEPSLATE)) {
             return state.get(PillarBlock.AXIS) != Direction.Axis.Y ? 6 : -1;
         }
+
         return -1;
     }
 
@@ -221,6 +334,7 @@ public class SusChunkFinder extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.world == null || mc.player == null) return;
+
         if (timer-- > 0) return;
         timer = scanInterval.get();
 
@@ -233,6 +347,7 @@ public class SusChunkFinder extends Module {
         int range = scanDistance.get();
         int needed = sensitivity.get();
         int neededTypes = minTypes.get();
+
         int yMin = Math.min(minY.get(), maxY.get());
         int yMax = Math.max(minY.get(), maxY.get());
 
@@ -246,11 +361,13 @@ public class SusChunkFinder extends Module {
                 long ySum = 0;
 
                 ChunkSection[] sections = chunk.getSectionArray();
+
                 for (int i = 0; i < sections.length; i++) {
                     ChunkSection section = sections[i];
                     if (section == null || section.isEmpty()) continue;
 
                     int baseY = (chunk.getBottomSectionCoord() + i) << 4;
+
                     if (baseY + 15 < yMin || baseY > yMax) continue;
                     if (!section.hasAny(this::counts)) continue;
 
@@ -260,10 +377,16 @@ public class SusChunkFinder extends Module {
                             if (worldY < yMin || worldY > yMax) continue;
 
                             for (int z = 0; z < 16; z++) {
-                                int type = typeOf(section.getBlockState(x, y, z));
+                                BlockState state = section.getBlockState(x, y, z);
+                                int type = typeOf(state);
+
                                 if (type >= 0) {
                                     typeCounts[type]++;
-                                    found.add(new BlockPos((cx << 4) + x, worldY, (cz << 4) + z));
+                                    found.add(new BlockPos(
+                                        (cx << 4) + x,
+                                        worldY,
+                                        (cz << 4) + z
+                                    ));
                                     ySum += worldY;
                                 }
                             }
@@ -277,7 +400,10 @@ public class SusChunkFinder extends Module {
                 }
 
                 if (found.size() >= needed && distinct >= neededTypes) {
-                    newHits.add(new int[]{cx, cz, found.size(), (int) (ySum / found.size())});
+                    newHits.add(new int[] {
+                        cx, cz, found.size(),
+                        (int) (ySum / found.size())
+                    });
                     newBlocks.addAll(found);
                 }
             }
@@ -289,27 +415,47 @@ public class SusChunkFinder extends Module {
         if (chatNotify.get() && newHits.size() > lastChunkCount) {
             info("Flagged %d chunks.", newHits.size());
         }
+
         lastChunkCount = newHits.size();
     }
 
     @EventHandler
     private void onRender(Render3DEvent event) {
+        if (mc.world == null) return;
+
         SettingColor base = boxColor.get();
         Color side = new Color(base.r, base.g, base.b, alpha.get());
+        ShapeMode mode = shapeMode.get();
 
+        // Render each flagged chunk as a full-height 16x16 box.
         if (highlightChunks.get()) {
+            double minWorldY = mc.world.getBottomY();
+            double maxWorldY = mc.world.getTopY();
+
             for (int[] hit : chunkHits) {
                 double x1 = hit[0] << 4;
                 double z1 = hit[1] << 4;
-                event.renderer.box(x1, hit[3], z1, x1 + 16, hit[3] + 1, z1 + 16,
-                    side, base, shapeMode.get(), 0);
+
+                event.renderer.box(
+                    x1, minWorldY, z1,
+                    x1 + 16, maxWorldY, z1 + 16,
+                    side, base, mode, 0
+                );
             }
         }
 
+        // Optionally render the individual matching blocks too.
         if (highlightBlocks.get()) {
             int limit = Math.min(blocks.size(), maxBlocks.get());
+
             for (int i = 0; i < limit; i++) {
-                event.renderer.box(blocks.get(i), side, base, shapeMode.get(), 0);
+                event.renderer.box(
+                    blocks.get(i),
+                    side,
+                    base,
+                    mode,
+                    0
+                );
             }
         }
     }
