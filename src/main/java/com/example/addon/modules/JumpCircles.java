@@ -86,7 +86,6 @@ public class JumpCircles extends Module {
 
         wasOnGround = grounded;
 
-        // Expire circles on the tick, not in the render loop.
         long life = duration.get() * 50_000_000L;
         long now = System.nanoTime();
         Iterator<Circle> it = circles.iterator();
