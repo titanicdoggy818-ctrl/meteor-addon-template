@@ -10,9 +10,9 @@ import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 
-import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Random;
 
 public class GoldCombatEffects extends Module {
@@ -22,13 +22,16 @@ public class GoldCombatEffects extends Module {
         double x, y, z;
         double px, py, pz;
         double vx, vy, vz;
-        int age, life;
-        double phase;
+        int age;
+        final int life;
+        final double phase;
 
-        Spark(double x, double y, double z, Random random) {
+        Spark(double x, double y, double z, int life, Random random) {
             this.x = this.px = x;
             this.y = this.py = y;
             this.z = this.pz = z;
+            this.life = life;
+            this.age = 0;
 
             double angle = random.nextDouble() * Math.PI * 2;
             double speed = 0.025 + random.nextDouble() * 0.11;
@@ -37,7 +40,6 @@ public class GoldCombatEffects extends Module {
             vz = Math.sin(angle) * speed;
             vy = 0.015 + random.nextDouble() * 0.12;
 
-            life = 8 + random.nextInt(13);
             phase = random.nextDouble() * Math.PI * 2;
         }
     }
@@ -76,9 +78,8 @@ public class GoldCombatEffects extends Module {
             .build()
     );
 
-    private final List<Spark> sparks = new ArrayList<>();
+    private final Deque<Spark> sparks = new ArrayDeque<>();
     private final Random random = new Random();
-    private long renderTime;
 
     public GoldCombatEffects() {
         super(Categories.Render, "gold-combat-effects",
@@ -100,25 +101,30 @@ public class GoldCombatEffects extends Module {
         double cz = target.getZ();
 
         int amount = particleCount.get();
+        double spreadVal = spread.get();
+        int lifeCap = lifetime.get();
 
-        // Keep the effect bounded if attacks happen rapidly.
         while (sparks.size() + amount > MAX_PARTICLES && !sparks.isEmpty()) {
-            sparks.remove(0);
+            sparks.pollFirst();
         }
 
         for (int i = 0; i < amount; i++) {
-            double x = cx + (random.nextDouble() * 2 - 1) * spread.get();
-            double y = cy + (random.nextDouble() * 2 - 1) * spread.get();
-            double z = cz + (random.nextDouble() * 2 - 1) * spread.get();
+            double x = cx + (random.nextDouble() * 2 - 1) * spreadVal;
+            double y = cy + (random.nextDouble() * 2 - 1) * spreadVal;
+            double z = cz + (random.nextDouble() * 2 - 1) * spreadVal;
 
-            Spark spark = new Spark(x, y, z, random);
-            spark.life = Math.min(spark.life, lifetime.get());
-            sparks.add(spark);
+            int life = 8 + random.nextInt(13);
+            if (life > lifeCap) life = lifeCap;
+
+            sparks.addLast(new Spark(x, y, z, life, random));
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
+        if (sparks.isEmpty()) return;
+
+        double noise = energyNoise.get();
         Iterator<Spark> iterator = sparks.iterator();
 
         while (iterator.hasNext()) {
@@ -132,11 +138,8 @@ public class GoldCombatEffects extends Module {
             spark.y += spark.vy;
             spark.z += spark.vz;
 
-            // Subtle turbulent motion, rather than random jumps.
-            spark.vx += Math.sin(spark.phase + spark.age * 0.7)
-                * energyNoise.get() * 0.08;
-            spark.vz += Math.cos(spark.phase + spark.age * 0.6)
-                * energyNoise.get() * 0.08;
+            spark.vx += Math.sin(spark.phase + spark.age * 0.7) * noise * 0.08;
+            spark.vz += Math.cos(spark.phase + spark.age * 0.6) * noise * 0.08;
 
             spark.vx *= 0.91;
             spark.vy = spark.vy * 0.91 - 0.003;
@@ -150,15 +153,16 @@ public class GoldCombatEffects extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        renderTime = System.nanoTime();
-        double time = renderTime / 1_000_000_000.0;
+        if (sparks.isEmpty()) return;
+
+        double time = System.nanoTime() / 1_000_000_000.0;
 
         for (Spark spark : sparks) {
             double progress = spark.age / (double) spark.life;
-            int alpha = Math.max(0, Math.min(255,
-                (int) (255 * (1.0 - progress))));
+            int alpha = (int) (255 * (1.0 - progress));
+            if (alpha < 0) alpha = 0;
+            else if (alpha > 255) alpha = 255;
 
-            // Hot white-gold center with a warm gold trail.
             Color trail = new Color(255, 166, 25, alpha);
             Color core = new Color(255, 239, 155, alpha);
 
@@ -168,7 +172,6 @@ public class GoldCombatEffects extends Module {
                 trail
             );
 
-            // A small flickering highlight on the spark.
             if (Math.sin(time * 22 + spark.phase) > -0.15) {
                 double size = 0.025 + (1.0 - progress) * 0.025;
 
