@@ -1,5 +1,6 @@
 package com.example.addon;
-
+  
+import com.example.addon.modules.GoldCombatEffects;
 import com.example.addon.commands.CommandExample;
 import com.example.addon.hud.HudExample;
 import com.example.addon.modules.JumpCircles;
@@ -28,6 +29,7 @@ public class AddonTemplate extends MeteorAddon {
         LOG.info("Initializing Meteor Addon Template");
 
         // Modules
+        Modules.get().add(new GoldCombatEffects());
         Modules.get().add(new SusChunkFinder());
         Modules.get().add(new SuspiciousESP());
         Modules.get().add(new LightFinder());
