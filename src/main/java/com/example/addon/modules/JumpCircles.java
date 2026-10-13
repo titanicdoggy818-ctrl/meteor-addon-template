@@ -10,10 +10,11 @@ import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class JumpCircles extends Module {
-    private record Circle(double x, double y, double z, long start) {}
+    private record Circle(double x, double y, double z, long start, double seed) {}
 
     private final SettingGroup sg = settings.getDefaultGroup();
 
@@ -75,60 +76,79 @@ public class JumpCircles extends Module {
         boolean grounded = mc.player.isOnGround();
 
         if (wasOnGround && !grounded && mc.player.getVelocity().y > 0.1) {
+            long now = System.nanoTime();
+            double seed = (now % 1_000_000_000L) * 1e-9;
             circles.add(new Circle(
                 mc.player.getX(), mc.player.getY() + 0.025,
-                mc.player.getZ(), System.nanoTime()
+                mc.player.getZ(), now, seed
             ));
         }
 
         wasOnGround = grounded;
+
+        // Expire circles on the tick, not in the render loop.
+        long life = duration.get() * 50_000_000L;
+        long now = System.nanoTime();
+        Iterator<Circle> it = circles.iterator();
+        while (it.hasNext()) {
+            if (now - it.next().start() > life) it.remove();
+        }
     }
 
     @EventHandler
     private void onRender(Render3DEvent event) {
+        if (circles.isEmpty()) return;
+
         long now = System.nanoTime();
         long life = duration.get() * 50_000_000L;
-        circles.removeIf(c -> now - c.start() > life);
 
         SettingColor base = color.get();
         int count = segments.get();
+        boolean doGrow = grow.get();
+        boolean doFade = fade.get();
+        boolean doEnergy = energy.get();
+        double noiseVal = noise.get();
+        double maxR = maxRadius.get();
+        double time = now / 1_000_000_000.0;
 
         for (Circle c : circles) {
             double t = Math.min(1, (now - c.start()) / (double) life);
-            double radius = grow.get() ? maxRadius.get() * t : maxRadius.get();
-            double alpha = fade.get() ? 1 - t : 1;
-            double time = now / 1_000_000_000.0;
+            double radius = doGrow ? maxR * t : maxR;
+            double alpha = doFade ? 1 - t : 1;
 
-            // Three layers make the ring look brighter without a framebuffer.
             for (int layer = 0; layer < 3; layer++) {
                 double layerRadius = radius * (1.0 - layer * 0.12);
                 double layerAlpha = alpha * (1.0 - layer * 0.23);
                 double y = c.y() + layer * 0.003;
 
+                int layerR = layer == 0 ? 0 : 15;
+                int layerG = layer == 0 ? 0 : 25;
+                int layerB = layer == 0 ? 0 : 35;
+
                 for (int i = 0; i < count; i++) {
                     double a1 = Math.PI * 2 * i / count;
                     double a2 = Math.PI * 2 * (i + 1) / count;
 
-                    double wobble1 = energy.get()
-                        ? Math.sin(a1 * 7 + time * 8 + c.start() * 1e-9) * noise.get()
+                    double wobble1 = doEnergy
+                        ? Math.sin(a1 * 7 + time * 8 + c.seed()) * noiseVal
                         : 0;
-                    double wobble2 = energy.get()
-                        ? Math.sin(a2 * 7 + time * 8 + c.start() * 1e-9) * noise.get()
+                    double wobble2 = doEnergy
+                        ? Math.sin(a2 * 7 + time * 8 + c.seed()) * noiseVal
                         : 0;
 
                     double r1 = layerRadius * (1 + wobble1);
                     double r2 = layerRadius * (1 + wobble2);
 
-                    int flicker = energy.get()
+                    int flicker = doEnergy
                         ? (int) (18 * (0.5 + 0.5 * Math.sin(time * 12 + i * 1.7)))
                         : 0;
 
                     int a = clamp((int) (base.a * layerAlpha) + flicker);
 
                     Color col = new Color(
-                        clamp(base.r + (layer == 0 ? 0 : 15)),
-                        clamp(base.g + (layer == 0 ? 0 : 25)),
-                        clamp(base.b + (layer == 0 ? 0 : 35)),
+                        clamp(base.r + layerR),
+                        clamp(base.g + layerG),
+                        clamp(base.b + layerB),
                         a
                     );
 
@@ -139,9 +159,8 @@ public class JumpCircles extends Module {
                         c.z() + Math.sin(a2) * r2, col
                     );
 
-                    // Animated bright segments travel around the outer ring.
-                    if (energy.get()) {
-                        double head = (time * 1.8 + c.start() * 1e-9) % (Math.PI * 2);
+                    if (doEnergy) {
+                        double head = (time * 1.8 + c.seed()) % (Math.PI * 2);
                         double distance = Math.abs(Math.atan2(
                             Math.sin(a1 - head), Math.cos(a1 - head)
                         ));
