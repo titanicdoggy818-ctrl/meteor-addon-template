@@ -1,4 +1,3 @@
-a
 package com.example.addon.modules;
 
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
