@@ -1,4 +1,3 @@
-
 package com.example.addon.modules;
 
 import meteordevelopment.meteorclient.events.entity.player.AttackEntityEvent;
